@@ -1,0 +1,31 @@
+#! /usr/bin/perl
+
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (C) 2019 Abinav Puthan Purayil
+
+use strict;
+use warnings;
+
+use File::Temp qw/ tempfile tempdir /;
+use File::Copy;
+use File::Basename;
+
+use Cwd qw(abs_path);
+use lib dirname (abs_path(__FILE__)) . "/lib/";
+
+use lib "lib/";
+
+use Simvar;
+use Simgep;
+use Gepin;
+
+my ($input_ll) = $ARGV[0];
+my ($tmp_ll_fh, $tmp_ll) = tempfile("prettyll.XXXX", DIR => "/tmp", UNLINK => 1);
+
+copy($input_ll, $tmp_ll);
+
+Llvm::init($tmp_ll);
+Simvar::transform($tmp_ll);
+# Simgep::transform($tmp_ll);
+# Gepin::transform($tmp_ll);
+system("cat $tmp_ll");
