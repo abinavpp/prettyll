@@ -24,6 +24,7 @@ my ($tmp_ll_fh, $tmp_ll) = tempfile("prettyll.XXXX", DIR => "/tmp", UNLINK => 1)
 
 copy($input_ll, $tmp_ll);
 
+# Llvm::test_parse($input_ll);
 Llvm::init($tmp_ll);
 Simvar::transform($tmp_ll);
 # Simgep::transform($tmp_ll);

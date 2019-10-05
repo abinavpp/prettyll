@@ -9,6 +9,8 @@ use warnings;
 use Data::Dumper;
 use Text::Balanced;
 
+no warnings 'experimental::smartmatch';
+
 package Llvm;
 
 # Regexes for parsing
@@ -101,26 +103,28 @@ sub is_global_var {
   return 0;
 }
 
-sub lex_epilogue {
+sub lex {
   my ($line) = @_;
 
-  $line =~ s/(, | < | > | \( | \) | \[ | \] | \{ | \} | ")/\ $1\ /xg;
+  $line =~ s/(, | ; | < | > | \( | \) | \[ | \] | \{ | \} |")/\ $1\ /xg;
   $line =~ s/^\s+//g;
   my @words = split(/\s+/, $line);
 
   for (my $i = 0; $i <= ($#words - 1); $i++) {
 
-    # coalesce packed struct (ie. <{...}>) words
+    # coalesce packed struct (ie. <{...}>) words.
+    # [$i + 1] can't go out-of-bounds since $i iterates from 0 to the
+    # last-but-first index
     if (($words[$i] eq '<' && $words[$i + 1] eq '{') ||
       ($words[$i] eq '}' && $words[$i + 1] eq '>')) {
-      Utils::coalesce_string_arr(\@words, "", $i..($i + 1));
+      Utils::coalesce_words(\@words, "", $i..($i + 1));
     }
 
     if ($words[$i] eq '"') {
       Utils::coalesce_single_nested(\@words, '"', $i);
 
-      if ($words[$i - 1] =~ /^(%|@)$/) {
-        Utils::coalesce_string_arr(\@words, "", ($i - 1)..$i);
+      if ($i > 0 && $words[$i - 1] =~ /^(%|@)$/) {
+        Utils::coalesce_words(\@words, "", ($i - 1)..$i);
       }
     }
 
@@ -129,44 +133,44 @@ sub lex_epilogue {
 }
 
 sub coalesce_array_typespec {
-  my ($epilogue_words, $opening) = @_;
-  Utils::coalesce_nested($epilogue_words, '[', ']', $opening);
+  my ($words, $opening) = @_;
+  Utils::coalesce_nested($words, '[', ']', $opening);
 }
 
 sub coalesce_packed_struct_typespec {
-  my ($epilogue_words, $opening) = @_;
-  Utils::coalesce_nested($epilogue_words, '<{', '}>', $opening);
+  my ($words, $opening) = @_;
+  Utils::coalesce_nested($words, '<{', '}>', $opening);
 }
 
 sub coalesce_struct_typespec {
-  my ($epilogue_words, $opening) = @_;
-  Utils::coalesce_nested($epilogue_words, '{', '}', $opening);
+  my ($words, $opening) = @_;
+  Utils::coalesce_nested($words, '{', '}', $opening);
 }
 
 sub coalesce_vector_typespec {
-  my ($epilogue_words, $opening) = @_;
-  Utils::coalesce_single_nested($epilogue_words, '>', $opening);
+  my ($words, $opening) = @_;
+  Utils::coalesce_single_nested($words, '>', $opening);
 }
 
-sub coalesce_epilogue_words {
-  my ($epilogue_words) = (@_);
+sub coalesce_words {
+  my ($words) = (@_);
 
-  for (my $i = 0; $i <= $#{$epilogue_words}; $i++) {
+  for (my $i = 0; $i <= $#{$words}; $i++) {
 
-    if ($$epilogue_words[$i] eq '<') {
-      coalesce_vector_typespec($epilogue_words, $i);
+    if ($$words[$i] eq '<') {
+      coalesce_vector_typespec($words, $i);
 
-    } elsif ($$epilogue_words[$i] eq '[') {
-      coalesce_array_typespec($epilogue_words, $i);
+    } elsif ($$words[$i] eq '[') {
+      coalesce_array_typespec($words, $i);
 
-    } elsif ($$epilogue_words[$i] eq '{') {
-      coalesce_struct_typespec($epilogue_words, $i);
+    } elsif ($$words[$i] eq '{') {
+      coalesce_struct_typespec($words, $i);
 
-    } elsif ($$epilogue_words[$i] eq '<{') {
-      coalesce_packed_struct_typespec($epilogue_words, $i);
+    } elsif ($$words[$i] eq '<{') {
+      coalesce_packed_struct_typespec($words, $i);
 
-    } elsif ($$epilogue_words[$i] =~ /^(> | }> | \])$/xg) {
-      die "vector/aggregate not enclosed";
+    } elsif ($$words[$i] =~ /^(> | }> | \])$/xg) {
+      Utils::die_maybe("vector/aggregate not enclosed");
     }
   }
 }
@@ -190,7 +194,7 @@ sub get_epilogue_words {
       return @{$cached_epilogue_words{$epilogue}};
     }
 
-    my @fields = lex_epilogue($epilogue);
+    my @fields = lex($epilogue);
 
     if ($instr_name && $instr_name eq 'phi') {
       if ($fields[0] eq '<') {
@@ -210,7 +214,7 @@ sub get_epilogue_words {
       return @fields;
     }
 
-    coalesce_epilogue_words(\@fields);
+    Llvm::coalesce_words(\@fields);
     @{$cached_epilogue_words{$epilogue}} = @fields;
     return @fields;
   }
@@ -335,5 +339,28 @@ sub init {
     # }
   }
 }
+
+# sub parse {
+#   my ($fh) = @_;
+#   if (my $line = <$fh>) {
+#     my @fields = lex($line);
+#     coalesce_words(\@fields);
+
+#     print join('|', @fields) . "\n";
+#     return $line;
+#   }
+#   return "";
+# }
+
+# sub test_parse {
+#   my ($input_ll) = @_;
+
+#   open(my $fh, '+<:encoding(UTF-8)', $input_ll)
+#     or die "Could not open file '$input_ll' $!";
+
+#   while (my $line = parse($fh)) {
+#     # print $line;
+#   }
+# }
 
 1;

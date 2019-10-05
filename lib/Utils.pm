@@ -8,6 +8,15 @@ use warnings;
 
 package Utils;
 
+my $pedantic_level = 0;
+
+sub die_maybe {
+  my ($message) = @_;
+  if ($pedantic_level > 0) {
+    die $message;
+  }
+}
+
 sub add_to_eqclass {
   my ($eqclass, $entries, $under) = @_;
 
@@ -24,20 +33,22 @@ sub add_to_eqclass {
   }
 }
 
-sub coalesce_string_arr {
-  my ($arr, $glue, @indices) = @_;
+# FIXME: The @indices *must* be consecutive and strictly ascending, currently we
+# don't have any requirement for coalescing non-consecutive indices.
+sub coalesce_words {
+  my ($words, $glue, @indices) = @_;
 
   if (scalar @indices <= 1) { return; }
 
   my $new = "";
   foreach my $index (@indices) {
-    $new .= $glue . @$arr[$index];
+    $new .= $glue . @$words[$index];
   }
 
-  $$arr[$indices[0]] = $new;
+  $$words[$indices[0]] = $new;
 
-  # recall that $#arr = last index of @arr
-  splice(@$arr, $indices[1], $#indices);
+  # recall that $#foo = last index of @foo
+  splice(@$words, $indices[1], $#indices);
 }
 
 sub coalesce_single_nested {
@@ -46,29 +57,28 @@ sub coalesce_single_nested {
 
   for (; $$words[$closing] ne $rpair && $closing <= $#{$words}; $closing++) {}
 
-  if ($closing > $#{$words}) { die "single_nested not enclosed"; }
+  if ($closing > $#{$words}) { die_maybe("single_nested not enclosed"); }
 
-  coalesce_string_arr($words, "", $opening..$closing);
+  coalesce_words($words, "", $opening..$closing);
 }
 
 sub coalesce_nested {
-  my ($epilogue_words, $lpair, $rpair, $opening) = @_;
+  my ($words, $lpair, $rpair, $opening) = @_;
   my $closing = $opening + 1;
   my $nesting = 1;
 
-  for (;$closing <= $#{$epilogue_words}; $closing++) {
-    if ($$epilogue_words[$closing] eq $lpair) {
+  for (;$closing <= $#{$words}; $closing++) {
+    if ($$words[$closing] eq $lpair) {
       $nesting++;
-    } elsif ($$epilogue_words[$closing] eq $rpair) {
+    } elsif ($$words[$closing] eq $rpair) {
       $nesting--;
       if ($nesting == 0) { last; }
     }
   }
 
-  if ($closing > $#{$epilogue_words}) { die "nested not enclosed"; }
+  if ($closing > $#{$words}) { die_maybe("nested not enclosed"); }
 
-  coalesce_string_arr($epilogue_words, " ", $opening..$closing);
+  coalesce_words($words, " ", $opening..$closing);
 }
-
 
 1;
