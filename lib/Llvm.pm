@@ -145,7 +145,7 @@ sub coalesce_struct_typespec {
 
 sub coalesce_vector_typespec {
   my ($epilogue_words, $opening) = @_;
-  Utils::coalesce_singled_nested($epilogue_words, '>', $opening);
+  Utils::coalesce_single_nested($epilogue_words, '>', $opening);
 }
 
 sub coalesce_epilogue_words {
