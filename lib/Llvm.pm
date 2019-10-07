@@ -103,13 +103,41 @@ sub is_global_var {
   return 0;
 }
 
+sub coalesce_packed_struct_typespec {
+  my ($words, $opening) = @_;
+  Utils::coalesce_nested($words, '<{', '}>', $opening);
+}
+
+sub coalesce_struct_typespec {
+  my ($words, $opening) = @_;
+  Utils::coalesce_nested($words, '{', '}', $opening);
+}
+
+sub coalesce_vector_typespec {
+  my ($words, $opening) = @_;
+  Utils::coalesce_single_nested($words, '>', $opening);
+}
+
+sub coalesce_array_typespec {
+  my ($words, $opening) = @_;
+
+  # Ignore if this is a phi operand.
+  if ($opening + 2 < $#{$words} && $$words[$opening + 2] eq ",") {
+    return;
+  }
+
+  Utils::coalesce_nested($words, '[', ']', $opening);
+}
+
 sub lex {
   my ($line) = @_;
 
+  # chop up $line to @words by these delimiters.
   $line =~ s/(, | ; | < | > | \( | \) | \[ | \] | \{ | \} |")/\ $1\ /xg;
   $line =~ s/^\s+//g;
   my @words = split(/\s+/, $line);
 
+  # Coalesce quotes and packed-struct delimiters.
   for (my $i = 0; $i <= ($#words - 1); $i++) {
 
     # coalesce packed struct (ie. <{...}>) words.
@@ -127,52 +155,36 @@ sub lex {
         Utils::coalesce_words(\@words, "", ($i - 1)..$i);
       }
     }
-
   }
-  return @words;
-}
 
-sub coalesce_array_typespec {
-  my ($words, $opening) = @_;
-  Utils::coalesce_nested($words, '[', ']', $opening);
-}
+  # discard comments.
+  for (my $i = 0; $i <= $#words; $i++) {
+    if ($words[$i] eq ";") {
+      splice(@words, -$i);
+      last;
+    }
+  }
 
-sub coalesce_packed_struct_typespec {
-  my ($words, $opening) = @_;
-  Utils::coalesce_nested($words, '<{', '}>', $opening);
-}
+  # Coalesce type specifiers.
+  for (my $i = 0; $i <= $#words; $i++) {
+    if ($words[$i] eq '<') {
+      coalesce_vector_typespec(\@words, $i);
 
-sub coalesce_struct_typespec {
-  my ($words, $opening) = @_;
-  Utils::coalesce_nested($words, '{', '}', $opening);
-}
+    } elsif ($words[$i] eq '[') {
+      coalesce_array_typespec(\@words, $i);
 
-sub coalesce_vector_typespec {
-  my ($words, $opening) = @_;
-  Utils::coalesce_single_nested($words, '>', $opening);
-}
+    } elsif ($words[$i] eq '{') {
+      coalesce_struct_typespec(\@words, $i);
 
-sub coalesce_words {
-  my ($words) = (@_);
+    } elsif ($words[$i] eq '<{') {
+      coalesce_packed_struct_typespec(\@words, $i);
 
-  for (my $i = 0; $i <= $#{$words}; $i++) {
-
-    if ($$words[$i] eq '<') {
-      coalesce_vector_typespec($words, $i);
-
-    } elsif ($$words[$i] eq '[') {
-      coalesce_array_typespec($words, $i);
-
-    } elsif ($$words[$i] eq '{') {
-      coalesce_struct_typespec($words, $i);
-
-    } elsif ($$words[$i] eq '<{') {
-      coalesce_packed_struct_typespec($words, $i);
-
-    } elsif ($$words[$i] =~ /^(> | }> | \])$/xg) {
+    } elsif ($words[$i] =~ /^(> | }> | \])$/xg) {
       Utils::die_maybe("vector/aggregate not enclosed");
     }
   }
+
+  return @words;
 }
 
 sub get_epilogue_words {
@@ -182,13 +194,6 @@ sub get_epilogue_words {
     my $instr_name = $+{instr_name};
     my $epilogue = $+{epilogue};
 
-    # force balanced [] for switch table cases.
-    # TODO: handle switch properly
-    if ($epilogue =~ /\[$/g) { $epilogue .= ']' }
-
-    # force balanced {} for funcdef
-    if ($epilogue =~ /\{$/g) { $epilogue .= '}' }
-
     # if already computed
     if ($cached_epilogue_words{$epilogue}) {
       return @{$cached_epilogue_words{$epilogue}};
@@ -196,25 +201,6 @@ sub get_epilogue_words {
 
     my @fields = lex($epilogue);
 
-    if ($instr_name && $instr_name eq 'phi') {
-      if ($fields[0] eq '<') {
-        coalesce_vector_typespec(\@fields, 0);
-
-      } elsif ($fields[0] eq '[') {
-        coalesce_array_typespec(\@fields, 0);
-
-      } elsif ($fields[0] eq '{') {
-        coalesce_struct_typespec(\@fields, 0);
-
-      } elsif ($fields[0] eq '<{') {
-        coalesce_packed_struct_typespec(\@fields, 0);
-      }
-
-      @{$cached_epilogue_words{$epilogue}} = @fields;
-      return @fields;
-    }
-
-    Llvm::coalesce_words(\@fields);
     @{$cached_epilogue_words{$epilogue}} = @fields;
     return @fields;
   }
@@ -256,15 +242,6 @@ sub get_instr_type {
     if ($epilogue_words[0] eq "inbounds") { return $epilogue_words[1]; }
     return $epilogue_words[0];
   }
-}
-
-sub dump_operands {
-  my ($line) = @_;
-  my @operands;
-
-  @operands = get_operands($line);
-  print "In $line";
-  print "[" . join(', ', @operands) . "]\n";
 }
 
 sub substitute_operands {
@@ -334,33 +311,114 @@ sub init {
 
   while (my $line = <$fh>) {
     get_epilogue_words($line);
-    # if ($line =~ /$instr_regex/ || $line =~ /$funcdef_regex/) {
-      # dump_operands($line);
-    # }
   }
 }
 
-# sub parse {
-#   my ($fh) = @_;
-#   if (my $line = <$fh>) {
-#     my @fields = lex($line);
-#     coalesce_words(\@fields);
+use constant {
+  parsed_type_empty => 'empty',
+  parsed_type_unknown => 'unknown',
+  parsed_type_eof => 'eof',
+  parsed_type_instruction => 'instruction',
 
-#     print join('|', @fields) . "\n";
-#     return $line;
-#   }
-#   return "";
-# }
+  parsed_type_type_declare => 'type_declare',
 
-# sub test_parse {
-#   my ($input_ll) = @_;
+  parsed_type_function_declare => 'function_declare',
+  parsed_type_function_define_start => 'function_define_start',
+  parsed_type_function_define_end => 'function_define_end'
+};
 
-#   open(my $fh, '+<:encoding(UTF-8)', $input_ll)
-#     or die "Could not open file '$input_ll' $!";
+sub get_args {
+  my (@words) = @_;
+  my @operands;
+  foreach my $word (@words) {
+    if (is_var($word) || is_const($word)) {
+      push(@operands, $word);
+    }
+  }
+  return @operands;
+}
 
-#   while (my $line = parse($fh)) {
-#     # print $line;
-#   }
-# }
+sub parse {
+  my ($fh) = @_;
+  my %parsed_obj;
+
+  if (defined(my $line = <$fh>)) {
+    $parsed_obj{line} = $line;
+    my @words = lex($line);
+    @{$parsed_obj{words}} = @words;
+
+    # empty line, comment
+    if ($#words == -1) {
+      $parsed_obj{type} = Llvm::parsed_type_empty;
+
+    # function declaration
+    } elsif ($words[0] eq "declare") {
+      $parsed_obj{type} = Llvm::parsed_type_function_declare;
+      my @func_names = grep { /@.+/ } @words;
+      $parsed_obj{name} = $func_names[0];
+
+    # function definition start
+    } elsif ($words[0] eq "define") {
+      $parsed_obj{type} = Llvm::parsed_type_function_define_start;
+      my @func_names = grep { /@.+/ } @words;
+      $parsed_obj{name} = $func_names[0];
+      @{$parsed_obj{args}} = get_args(@words);
+      shift(@{$parsed_obj{args}});
+
+    # function definition end
+    } elsif ($words[0] eq "}") {
+      $parsed_obj{type} = Llvm::parsed_type_function_define_end;
+
+    # instruction with lhs or type declare
+    } elsif (is_var($words[0]) && $words[1] eq "=") {
+      $parsed_obj{lhs} = $words[0];
+
+      # type declare
+      if ($words[2] eq "type") {
+        $parsed_obj{type} = Llvm::parsed_type_type_declare;
+
+      # instruction with lhs
+      } else {
+        $parsed_obj{type} = Llvm::parsed_type_instruction;
+        $parsed_obj{name} = $words[2];
+        @{$parsed_obj{args}} = get_args(@words);
+        shift(@{$parsed_obj{args}});
+      }
+
+    # instruction without lhs.
+    } elsif ($words[0] =~ /[\w\.]+/) {
+      $parsed_obj{type} = Llvm::parsed_type_instruction;
+      $parsed_obj{name} = $words[0];
+      @{$parsed_obj{args}} = get_args(@words);
+
+    # unknown
+    } else {
+      $parsed_obj{type} = Llvm::parsed_type_unknown;
+      print "@words\n";
+    }
+
+  } else {
+    $parsed_obj{type} = Llvm::parsed_type_eof;
+  }
+
+  return %parsed_obj;
+}
+
+sub dump_parser {
+  my ($ll) = @_;
+
+  open(my $fh, '+<:encoding(UTF-8)', $ll)
+    or die "Could not open file '$ll' $!";
+
+  while (my %parsed_obj = parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_empty) { next; }
+    print "[$parsed_obj{type}] ";
+    if ($parsed_obj{name}) { print "name: $parsed_obj{name}, "; }
+    if ($parsed_obj{lhs}) { print "lhs: $parsed_obj{lhs}, "; }
+    if ($parsed_obj{args}) { print "args: @{$parsed_obj{args}}"; }
+    print "\n";
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
+  }
+}
 
 1;

@@ -42,7 +42,9 @@ sub coalesce_words {
 
   my $new = "";
   foreach my $index (@indices) {
-    $new .= $glue . @$words[$index];
+    if ($index <= $#{$words}) {
+      $new .= $glue . @$words[$index];
+    }
   }
 
   $$words[$indices[0]] = $new;
@@ -55,7 +57,7 @@ sub coalesce_single_nested {
   my ($words, $rpair, $opening) = @_;
   my $closing = $opening + 1;
 
-  for (; $$words[$closing] ne $rpair && $closing <= $#{$words}; $closing++) {}
+  for (; $closing <= $#{$words} && $$words[$closing] ne $rpair; $closing++) {}
 
   if ($closing > $#{$words}) { die_maybe("single_nested not enclosed"); }
 
@@ -67,7 +69,7 @@ sub coalesce_nested {
   my $closing = $opening + 1;
   my $nesting = 1;
 
-  for (;$closing <= $#{$words}; $closing++) {
+  for (; $closing <= $#{$words}; $closing++) {
     if ($$words[$closing] eq $lpair) {
       $nesting++;
     } elsif ($$words[$closing] eq $rpair) {
