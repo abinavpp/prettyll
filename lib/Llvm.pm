@@ -187,118 +187,6 @@ sub lex {
   return @words;
 }
 
-sub get_epilogue_words {
-  my ($line) = @_;
-
-  if ($line =~ /$instr_regex/ || $line =~ /$funcdef_regex/) {
-    my $instr_name = $+{instr_name};
-    my $epilogue = $+{epilogue};
-
-    # if already computed
-    if ($cached_epilogue_words{$epilogue}) {
-      return @{$cached_epilogue_words{$epilogue}};
-    }
-
-    my @fields = lex($epilogue);
-
-    @{$cached_epilogue_words{$epilogue}} = @fields;
-    return @fields;
-  }
-}
-
-sub get_operands {
-  my ($line) = @_;
-  my @operands;
-
-  if ($line =~ /$instr_regex/ || $line =~ /$funcdef_regex/) {
-    my $epilogue = $+{epilogue};
-
-    # if already computed
-    if ($cached_epilogue_operands{$epilogue}) {
-      return @{$cached_epilogue_operands{$epilogue}};
-    }
-
-    my @epilogue_words = get_epilogue_words($line);
-
-    my $i = 0;
-    foreach my $epilogue_word (@epilogue_words) {
-      if (is_var($epilogue_word) || is_const($epilogue_word)) {
-        $operands[$i++] = $epilogue_word;
-      }
-    }
-    @{$cached_epilogue_operands{$epilogue}} = @operands;
-  }
-
-
-  return @operands;
-}
-
-sub get_instr_type {
-  my ($line) = @_;
-  if ($line =~ /$instr_regex/) {
-    if ($+{instr_name} ne "getelementptr") { die "get_instr_type not supported for $+{instr_name}"; }
-
-    my @epilogue_words = get_epilogue_words($line);
-    if ($epilogue_words[0] eq "inbounds") { return $epilogue_words[1]; }
-    return $epilogue_words[0];
-  }
-}
-
-sub substitute_operands {
-  my ($instr, $var_hash) = @_;
-
-  my @instr_operands = get_operands($instr);
-  foreach my $operand (@instr_operands) {
-    # iff it's a valid operand (the get_operads might catch a BB
-    # defintion's comment for preds = %<something>)
-    if ($$var_hash{$operand}) {
-      $instr =~ s/$operand/$$var_hash{$operand}/g;
-    }
-  }
-
-  return $instr;
-}
-
-sub get_globals {
-  # if already computed
-  if (@globals) { return @globals; }
-
-  open(my $fh, '+<:encoding(UTF-8)', $input_ll)
-    or die "Could not open file '$input_ll' $!";
-
-  # fetch all global declarations
-  while (my $line = <$fh>) {
-    # function declarations
-    if ($line =~ /$Llvm::funcdecl_regex/) {
-      push(@globals, $+{func_name});
-
-      # for instr of the form "@foo = ..."
-    } elsif ($line =~ /$Llvm::instr_regex/) {
-      if ($+{instr_lhs} && Llvm::is_global_var($+{instr_lhs})) {
-        push(@globals, $+{instr_lhs});
-      }
-    }
-  }
-  return @globals;
-}
-
-sub get_userdef_types {
-  # if already computed
-  if (@userdef_types) { return @userdef_types; }
-
-  open(my $fh, '+<:encoding(UTF-8)', $input_ll)
-    or die "Could not open file '$input_ll' $!";
-
-  while (my $line = <$fh>) {
-    # function declarations
-    if ($line =~ /$Llvm::typedecl_regex/) {
-      push(@userdef_types, $+{type_name});
-    }
-  }
-
-  return @userdef_types;
-}
-
 sub init {
   my ($ll) = @_;
   $input_ll = $ll;
@@ -394,7 +282,7 @@ sub parse {
     # unknown
     } else {
       $parsed_obj{type} = Llvm::parsed_type_unknown;
-      print "@words\n";
+      # print STDERR "in line $line\n@words\n";
     }
 
   } else {
@@ -421,4 +309,124 @@ sub dump_parser {
   }
 }
 
+
+sub get_globals {
+  # if already computed
+  if (@globals) { return @globals; }
+
+  open(my $fh, '+<:encoding(UTF-8)', $input_ll)
+    or die "Could not open file '$input_ll' $!";
+
+  # fetch all global declarations
+  while (my %parsed_obj = parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
+
+    # function declarations
+    if ($parsed_obj{type} eq Llvm::parsed_type_function_declare) {
+      push(@globals, $parsed_obj{name});
+
+    # for instr of the form "@foo = ..."
+    } elsif ($parsed_obj{type} eq Llvm::parsed_type_instruction) {
+      if ($parsed_obj{lhs} && is_global_var($parsed_obj{lhs})) {
+        push(@globals, $parsed_obj{lhs});
+      }
+    }
+  }
+
+  return @globals;
+}
+
+sub get_userdef_types {
+  # if already computed
+  if (@userdef_types) { return @userdef_types; }
+
+  open(my $fh, '+<:encoding(UTF-8)', $input_ll)
+    or die "Could not open file '$input_ll' $!";
+
+  while (my %parsed_obj = parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
+
+    # type declarations
+    if ($parsed_obj{type} eq Llvm::parsed_type_type_declare) {
+      push(@userdef_types, $parsed_obj{lhs});
+    }
+  }
+
+  return @userdef_types;
+}
+
+
+# deprecated section
+# ==================
+sub get_epilogue_words {
+  my ($line) = @_;
+
+  if ($line =~ /$instr_regex/ || $line =~ /$funcdef_regex/) {
+    my $instr_name = $+{instr_name};
+    my $epilogue = $+{epilogue};
+
+    # if already computed
+    if ($cached_epilogue_words{$epilogue}) {
+      return @{$cached_epilogue_words{$epilogue}};
+    }
+
+    my @fields = lex($epilogue);
+
+    @{$cached_epilogue_words{$epilogue}} = @fields;
+    return @fields;
+  }
+}
+
+sub get_operands {
+  my ($line) = @_;
+  my @operands;
+
+  if ($line =~ /$instr_regex/ || $line =~ /$funcdef_regex/) {
+    my $epilogue = $+{epilogue};
+
+    # if already computed
+    if ($cached_epilogue_operands{$epilogue}) {
+      return @{$cached_epilogue_operands{$epilogue}};
+    }
+
+    my @epilogue_words = get_epilogue_words($line);
+
+    my $i = 0;
+    foreach my $epilogue_word (@epilogue_words) {
+      if (is_var($epilogue_word) || is_const($epilogue_word)) {
+        $operands[$i++] = $epilogue_word;
+      }
+    }
+    @{$cached_epilogue_operands{$epilogue}} = @operands;
+  }
+
+
+  return @operands;
+}
+
+sub get_instr_type {
+  my ($line) = @_;
+  if ($line =~ /$instr_regex/) {
+    if ($+{instr_name} ne "getelementptr") { die "get_instr_type not supported for $+{instr_name}"; }
+
+    my @epilogue_words = get_epilogue_words($line);
+    if ($epilogue_words[0] eq "inbounds") { return $epilogue_words[1]; }
+    return $epilogue_words[0];
+  }
+}
+
+sub substitute_operands {
+  my ($instr, $var_hash) = @_;
+
+  my @instr_operands = get_operands($instr);
+  foreach my $operand (@instr_operands) {
+    # iff it's a valid operand (the get_operads might catch a BB
+    # defintion's comment for preds = %<something>)
+    if ($$var_hash{$operand}) {
+      $instr =~ s/$operand/$$var_hash{$operand}/g;
+    }
+  }
+
+  return $instr;
+}
 1;
