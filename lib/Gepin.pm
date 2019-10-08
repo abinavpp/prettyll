@@ -17,49 +17,54 @@ sub transform {
     or die "Could not open file '$input_ll' $!";
 
   my $output_ir = "";
-  while (my $line = <$fh>) {
+  while (my %parsed_obj = Llvm::parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
 
     # Print everything outside a function
-    $output_ir .= $line;
+    $output_ir .= $parsed_obj{line};
 
     # if function definition
-    if ($line =~ /$Llvm::funcdef_regex/) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_function_define_start) {
       my %var_to_gepdim = ();
 
-      while (my $line = <$fh>) { # start of function
+      # parse function body
+      while (%parsed_obj = Llvm::parse($fh)) {
+        if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
         my $print_me = "";
 
-        if ($line =~ /^\s*?\}\s*?$/) { $output_ir .= $line; last; } # end of function
+        # end of function
+        if ($parsed_obj{type} eq Llvm::parsed_type_function_define_end)
+          { $output_ir .= $parsed_obj{line}; last; }
 
-        if ($line =~ /$Llvm::instr_regex/) {
-          # we need to remember the capture-groups since a subsequent regex
-          # match might loose it.
-          my $instr_lhs = $+{instr_lhs};
-          my $instr_name = $+{instr_name};
-          # $line = Llvm::substitute_operands($line, \%var_to_gepdim);
-          my @instr_operands = Llvm::get_operands($line);
+        if ($parsed_obj{type} eq Llvm::parsed_type_instruction) {
+          my $instr_lhs = $parsed_obj{lhs};
+          my $instr_name = $parsed_obj{name};
+          my @instr_operands = @{$parsed_obj{args}};
+          my @words = @{$parsed_obj{words}};
 
+          # TODO: How should we handle g1 = gep ...; g2 = gep g1 ...;
           if ($instr_name eq "getelementptr") {
-            my $type = Llvm::get_instr_type($line);
+            my $gepdim = "";
 
-            # Llvm::dump_operands($line);
-            # we can't use "[...]" or "<...>" since they are discarded by
-            # get_epilogue_words()/get_operands(). Also no spaces since regex
-            # sucks
-            my $gepdim = "%{$type-\>$instr_operands[0]" .
-              "{". join('|', @instr_operands[1..$#instr_operands]) . "}}";
+            # add type
+            if ($words[3] eq "inbounds") {
+              $gepdim .= "$words[6] ";
+            } else {
+              $gepdim .= "$words[5] ";
+            }
+
+            # add the base and indices.
+            $gepdim .= "$instr_operands[0]";
+            $gepdim .= "[". join(', ', @instr_operands[1..$#instr_operands]) . "]";
 
             $var_to_gepdim{$instr_lhs} = $gepdim;
-            # $print_me = $line;
-            $print_me .= "- $instr_lhs = $gepdim\n";
 
           } else {
-            $print_me = Llvm::substitute_operands($line, \%var_to_gepdim);
+            $print_me = Llvm::substitute_operands($parsed_obj{line}, \%var_to_gepdim);
           }
 
-          # still print even if it's not an instr_regex
         } else {
-          $print_me = $line;
+          $print_me = $parsed_obj{line};
         }
 
         $output_ir .= $print_me;
