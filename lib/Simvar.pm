@@ -24,47 +24,51 @@ sub transform {
   }
 
   my $output_ir = "";
-  while (my $line = <$fh>) {
+  while (my %parsed_obj = Llvm::parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
 
     # Print everything outside a function
-    $output_ir .= $line;
+    $output_ir .= $parsed_obj{line};
 
     # if function definition
-    if ($line =~ /$Llvm::funcdef_regex/) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_function_define_start) {
       # reset the equivalence class to only have globals since we are in a
       # new function
       %var_eqclass = %globvar_eqclass;
 
+      # we process the function-body twice. At iteration_num = 0, we don't print
+      # anything, but updates the eq-class. At iteration num = 1, we print. The
+      # double iteration is necessary for updating phi-operands.
       my $iteration_num = 0;
       my $tell_func_begin = tell($fh);
 
-      while (my $line = <$fh> || die "malformed function!") { # start of function
+      # parse function body
+      while (%parsed_obj = Llvm::parse($fh)) {
+        if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
         my $print_me = "";
 
         # end of function
-        if ($line =~ /^\s*?\}\s*?$/) {
+        if ($parsed_obj{type} eq Llvm::parsed_type_function_define_end) {
           if ($iteration_num == 0) {
             $iteration_num++;
             seek($fh, $tell_func_begin, 0);
             next;
           } elsif ($iteration_num == 1) {
-            $output_ir .= $line;
+            $output_ir .= $parsed_obj{line};
             last;
           }
         }
 
-        if ($line =~ /$Llvm::instr_regex/) {
-          # we need to remember the capture-groups since a subsequent regex
-          # match might loose it.
-          my $instr_lhs = $+{instr_lhs};
-          my $instr_name = $+{instr_name};
-          my @instr_operands = Llvm::get_operands($line);
+        if ($parsed_obj{type} eq Llvm::parsed_type_instruction) {
+          my $instr_lhs = $parsed_obj{lhs};
+          my $instr_name = $parsed_obj{name};
+          my @instr_operands = @{$parsed_obj{args}};
 
           # if trivial ("skippable") instr, ie cast/load instruction with a
           # variable operand. There are constant casts (like zext 0 to i64),
           # which are treated as non-trivial instr with lhs.
           # TODO: maybe add trunc ?
-          if ($instr_name =~ /(bitcast | load | sext | zext | inttoptr)/x &&
+          if ($instr_name =~ /^(bitcast | load | sext | zext | inttoptr)$/x &&
             !Llvm::is_const($instr_operands[0])) {
 
             # TODO: handle load (bitcast (gep ... )) kinds
@@ -78,26 +82,26 @@ sub transform {
           # if non-trivial instr without lhs
           } elsif (!$instr_lhs) {
             # then substitue operands with it's eqclass's parent
-            $print_me = 
-              Llvm::substitute_operands($line, \%var_eqclass);
-                
+            $print_me =
+              Llvm::substitute_operands(\%parsed_obj, \%var_eqclass);
+
           # if non-trivial instr with lhs
           } else {
             # set the eqclass parent for lhs as itself.
             Utils::add_to_eqclass(\%var_eqclass, [$instr_lhs]);
 
-            # then substitue operands with it's eqclass's parent
-            $print_me = 
-              Llvm::substitute_operands($line, \%var_eqclass);
+            # then substitute operands with it's eqclass's parent
+            $print_me =
+              Llvm::substitute_operands(\%parsed_obj, \%var_eqclass);
           }
 
-        # still print even if it's not an instr_regex
+        # print even if it's not an instruction type
         } else {
-          $print_me = $line;
+          $print_me = $parsed_obj{line};
         }
 
         if ($iteration_num == 1) { $output_ir .= $print_me; }
-      } # end of function (or malformed function)
+      } # end of function
     }
   }
 

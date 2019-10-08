@@ -16,7 +16,6 @@ use lib dirname (abs_path(__FILE__)) . "/lib/";
 use lib "lib/";
 
 use Simvar;
-use Simvar2;
 use Simgep;
 use Gepin;
 
@@ -27,7 +26,7 @@ copy($input_ll, $tmp_ll);
 
 # Llvm::dump_parser($input_ll);
 Llvm::init($tmp_ll);
-Simvar2::transform($tmp_ll);
+Simvar::transform($tmp_ll);
 # Simgep::transform($tmp_ll);
 # Gepin::transform($tmp_ll);
 system("cat $tmp_ll");

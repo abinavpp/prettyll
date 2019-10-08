@@ -60,7 +60,7 @@ sub transform {
             $var_to_gepdim{$instr_lhs} = $gepdim;
 
           } else {
-            $print_me = Llvm::substitute_operands($parsed_obj{line}, \%var_to_gepdim);
+            $print_me = Llvm::substitute_operands(\%parsed_obj, \%var_to_gepdim);
           }
 
         } else {
