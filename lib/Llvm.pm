@@ -7,15 +7,13 @@ use strict;
 use warnings;
 
 use Data::Dumper;
-use Text::Balanced;
 
 no warnings 'experimental::smartmatch';
 
 package Llvm;
 
-# Regexes for parsing
+# Regexes for parsing (not used anymore)
 # -------------------
-
 our $instr_regex = qr/\ *?
   (
     (?<instr_lhs>(%|@).+?)
@@ -59,12 +57,6 @@ my @userdef_types;
 
 # the input .ll file
 my $input_ll;
-
-# map of epilogue-of-line -> it's words
-my %cached_epilogue_words;
-
-# map of epilogue-of-line -> it's operands
-my %cached_epilogue_operands;
 
 sub is_const {
   my ($var) = @_;
@@ -363,4 +355,5 @@ sub substitute_operands {
 
   return $instr;
 }
+
 1;
