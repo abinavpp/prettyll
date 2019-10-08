@@ -301,13 +301,13 @@ sub dump_parser {
     or die "Could not open file '$ll' $!";
 
   while (my %parsed_obj = parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
     if ($parsed_obj{type} eq Llvm::parsed_type_empty) { next; }
     print "[$parsed_obj{type}] ";
     if ($parsed_obj{name}) { print "name: $parsed_obj{name}, "; }
     if ($parsed_obj{lhs}) { print "lhs: $parsed_obj{lhs}, "; }
     if ($parsed_obj{args}) { print "args: @{$parsed_obj{args}}"; }
     print "\n";
-    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
   }
 }
 
