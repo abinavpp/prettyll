@@ -17,21 +17,33 @@ sub transform {
     or die "Could not open file '$input_ll' $!";
 
   my $output_ir = "";
-  while (my $line = <$fh>) {
-    if ($line =~ /$Llvm::instr_regex/) {
-      my $instr_name = $+{instr_name};
+  while (my %parsed_obj = Llvm::parse($fh)) {
+    if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
+
+    if ($parsed_obj{type} eq Llvm::parsed_type_instruction) {
+      my $instr_lhs = $parsed_obj{lhs};
+      my $instr_name = $parsed_obj{name};
+      my @instr_operands = @{$parsed_obj{args}};
+      my @words = @{$parsed_obj{words}};
 
       if ($instr_name eq "getelementptr") {
-        my $instr_lhs = $+{instr_lhs};
-        my @instr_operands = Llvm::get_operands($line);
-        $output_ir .= "  $instr_lhs = getelementptr " . Llvm::get_instr_type($line) .
-        " $instr_operands[0]\[" . join(', ', @instr_operands[1..$#instr_operands]) . "]\n";
+        $output_ir .= "  $instr_lhs = getelementptr ";
+
+        # add type
+        if ($words[3] eq "inbounds") {
+          $output_ir .= "$words[6] ";
+        } else {
+          $output_ir .= "$words[5] ";
+        }
+
+        # add operands
+        $output_ir .= "$instr_operands[0]\[" . join(', ', @instr_operands[1..$#instr_operands]) . "]\n";
       } else {
-        $output_ir .= "$line";
+        $output_ir .= "$parsed_obj{line}";
       }
 
     } else {
-      $output_ir .= "$line";
+      $output_ir .= "$parsed_obj{line}";
     }
   }
 
