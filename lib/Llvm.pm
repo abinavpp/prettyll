@@ -51,12 +51,7 @@ our $typedecl_regex = qr/
   .*
   $/x;
 
-
-
-# Cached data for reuse
-# ---------------------
-
-# array globals
+# array of globals
 my @globals;
 
 # array of user-defined types
@@ -70,8 +65,6 @@ my %cached_epilogue_words;
 
 # map of epilogue-of-line -> it's operands
 my %cached_epilogue_operands;
-
-
 
 sub is_const {
   my ($var) = @_;
@@ -202,6 +195,17 @@ sub init {
   }
 }
 
+sub get_args {
+  my (@words) = @_;
+  my @operands;
+  foreach my $word (@words) {
+    if (is_var($word) || is_const($word)) {
+      push(@operands, $word);
+    }
+  }
+  return @operands;
+}
+
 use constant {
   parsed_type_empty => 'empty',
   parsed_type_unknown => 'unknown',
@@ -215,22 +219,18 @@ use constant {
   parsed_type_function_define_end => 'function_define_end'
 };
 
-sub get_args {
-  my (@words) = @_;
-  my @operands;
-  foreach my $word (@words) {
-    if (is_var($word) || is_const($word)) {
-      push(@operands, $word);
-    }
-  }
-  return @operands;
-}
+my %cached_parsed_objs;
 
 sub parse {
   my ($fh) = @_;
   my %parsed_obj;
 
   if (defined(my $line = <$fh>)) {
+    # If $line already parsed
+    if ($cached_parsed_objs{$line}) {
+      return %{$cached_parsed_objs{$line}};
+    }
+
     $parsed_obj{line} = $line;
     my @words = lex($line);
     @{$parsed_obj{words}} = @words;
@@ -284,6 +284,8 @@ sub parse {
       $parsed_obj{type} = Llvm::parsed_type_unknown;
       # print STDERR "in line $line\n@words\n";
     }
+
+    %{$cached_parsed_objs{$line}} = %parsed_obj;
 
   } else {
     $parsed_obj{type} = Llvm::parsed_type_eof;
