@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2019 Abinav Puthan Purayil
 
+package Prettyll;
+
 use strict;
 use warnings;
 
 use File::Temp qw/ tempfile tempdir /;
 use File::Copy;
 use File::Basename;
+use Getopt::Long;
 
 use Cwd qw(abs_path);
 use lib dirname (abs_path(__FILE__)) . "/lib/";
@@ -18,15 +21,56 @@ use lib "lib/";
 use Simvar;
 use Simgep;
 use Gepin;
+use Demangle;
+
+sub die_version {
+  print "prettyll v0.1\n";
+  print "(C) 2019 Abinav Puthan Purayil\n";
+
+  exit;
+}
+
+sub die_usage {
+  print
+  "Usage: prettyll [OPTIONS] <ir>
+  -demangle       enables the c++ demangler pass
+  -gepin          enables the gep inliner pass (experimental!)
+  -simgep         enables the gep simplifier pass
+  -simvar         enables the variable simplifier pass (on by default)
+  -dump-parser    dumps the parser output
+  -h, --help      view this help
+  -v, --version   view version\n";
+
+  exit;
+}
+
+# enable simvar by default
+our $opt_simvar = "1";
+
+if ($#ARGV == -1) { die_usage(); }
+
+GetOptions(
+  "demangle" => \our $opt_demangle,
+  "gepin" => \our $opt_gepin,
+  "simgep" => \our $opt_simgep,
+  "simvar" => \$opt_simvar,
+  "dump-parser" => \my $opt_dump_parser,
+  "help" => \&die_usage,
+  "version" => \&die_version)
+  or die "Error parsing cmdline";
 
 my ($input_ll) = $ARGV[0];
 my ($tmp_ll_fh, $tmp_ll) = tempfile("prettyll.XXXX", DIR => "/tmp", UNLINK => 1);
 
 copy($input_ll, $tmp_ll);
 
-# Llvm::dump_parser($input_ll);
+if ($opt_dump_parser) { Llvm::dump_parser($input_ll); exit; }
+
 Llvm::init($tmp_ll);
+Demangle::transform($tmp_ll);
 Simvar::transform($tmp_ll);
-# Simgep::transform($tmp_ll);
-# Gepin::transform($tmp_ll);
+Simgep::transform($tmp_ll);
+Gepin::transform($tmp_ll);
 system("cat $tmp_ll");
+
+1;

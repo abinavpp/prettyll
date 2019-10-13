@@ -13,6 +13,8 @@ use Utils;
 package Simvar;
 
 sub transform {
+  if (!$Prettyll::opt_simvar) { return; }
+
   my ($input_ll) = @_;
   open(my $fh, '+<:encoding(UTF-8)', $input_ll)
     or die "Could not open file '$input_ll' $!";

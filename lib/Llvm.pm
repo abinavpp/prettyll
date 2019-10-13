@@ -80,6 +80,15 @@ sub is_var {
   return 0;
 }
 
+sub is_var_or_type_or_comdat {
+  my ($var) = @_;
+
+  if ($var =~ /^(%|@|\$).+?$/) {
+    return 1;
+  }
+  return 0;
+}
+
 sub is_global_var {
   my ($var) = @_;
   if (is_var($var) && $var =~ /^@.+?/) {
