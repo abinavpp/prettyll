@@ -44,16 +44,13 @@ sub die_usage {
   exit;
 }
 
-# enable simvar by default
-our $opt_simvar = "1";
-
 if ($#ARGV == -1) { die_usage(); }
 
 GetOptions(
   "demangle" => \our $opt_demangle,
   "gepin" => \our $opt_gepin,
   "simgep" => \our $opt_simgep,
-  "simvar" => \$opt_simvar,
+  "simvar" => \our $opt_simvar,
   "dump-parser" => \my $opt_dump_parser,
   "help" => \&die_usage,
   "version" => \&die_version)

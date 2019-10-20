@@ -44,22 +44,29 @@ sub transform {
           my @instr_operands = @{$parsed_obj{args}};
           my @words = @{$parsed_obj{words}};
 
-          # TODO: How should we handle g1 = gep ...; g2 = gep g1 ...;
           if ($instr_name eq "getelementptr") {
-            my $gepdim = "";
+            my $gepdim = "gep ";
 
-            # add type
+            # add the type
             if ($words[3] eq "inbounds") {
               $gepdim .= "$words[6] ";
             } else {
               $gepdim .= "$words[5] ";
             }
 
-            # add the base and indices.
-            $gepdim .= "$instr_operands[0]";
-            $gepdim .= "[". join(', ', @instr_operands[1..$#instr_operands]) . "]";
+            # add the base
+            #
+            # If this is a gep of gep.
+            if ($var_to_gepdim{$instr_operands[0]}) {
+              $gepdim .= "$var_to_gepdim{$instr_operands[0]}";
+            } else {
+              $gepdim .= "$instr_operands[0]";
+            }
 
-            $var_to_gepdim{$instr_lhs} = $gepdim;
+            # add the indices
+            $gepdim .= '[' . join(', ', @instr_operands[1..$#instr_operands]) . ']';
+
+            $var_to_gepdim{$instr_lhs} = "(" . $gepdim . ")";
 
           } else {
             $print_me = Llvm::substitute_operands(\%parsed_obj, \%var_to_gepdim);

@@ -16,3 +16,5 @@ variables to their original name, not the casted one.
 - Simgep: translates getelementptr instruction arguments to [idx0, idx1, ..] format.
 
 - Demangle: demangles mangled C++ symbols.
+
+- Gepin: inlines gep'ed variables.
