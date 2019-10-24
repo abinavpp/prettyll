@@ -54,14 +54,15 @@ sub transform {
               $gepdim .= "$words[5] ";
             }
 
-            # add the base
-            #
-            # If this is a gep of gep.
-            if ($var_to_gepdim{$instr_operands[0]}) {
-              $gepdim .= "$var_to_gepdim{$instr_operands[0]}";
-            } else {
-              $gepdim .= "$instr_operands[0]";
+            # if there's a gep operand, then expand it.
+            for (my $i = 0; $i <= $#instr_operands; $i++) {
+              if ($var_to_gepdim{$instr_operands[$i]}) {
+                $instr_operands[$i] = $var_to_gepdim{$instr_operands[$i]};
+              }
             }
+
+            # add the base
+            $gepdim .= "$instr_operands[0]";
 
             # add the indices
             $gepdim .= '[' . join(', ', @instr_operands[1..$#instr_operands]) . ']';
