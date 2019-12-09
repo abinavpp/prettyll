@@ -215,12 +215,17 @@ use constant {
 my %cached_parsed_objs;
 
 sub parse {
-  my ($fh) = @_;
+  my ($fh, $caching_state) = @_;
   my %parsed_obj;
+
+  # enable caching by default
+  if (!(defined $caching_state)) {
+    $caching_state = 1;
+  }
 
   if (defined(my $line = <$fh>)) {
     # If $line already parsed
-    if ($cached_parsed_objs{$line}) {
+    if ($caching_state && $cached_parsed_objs{$line}) {
       return %{$cached_parsed_objs{$line}};
     }
 
@@ -251,7 +256,7 @@ sub parse {
       $parsed_obj{type} = Llvm::parsed_type_function_define_end;
 
     # instruction with lhs or type declare
-    } elsif (is_var($words[0]) && $words[1] eq "=") {
+    } elsif ($#words >= 1 && $words[1] eq "=") {
       $parsed_obj{lhs} = $words[0];
 
       # type declare
@@ -278,7 +283,9 @@ sub parse {
       # print STDERR "in line $line\n@words\n";
     }
 
-    %{$cached_parsed_objs{$line}} = %parsed_obj;
+    if ($caching_state) {
+      %{$cached_parsed_objs{$line}} = %parsed_obj;
+    }
 
   } else {
     $parsed_obj{type} = Llvm::parsed_type_eof;
@@ -313,7 +320,9 @@ sub get_globals {
     or die "Could not open file '$input_ll' $!";
 
   # fetch all global declarations
-  while (my %parsed_obj = parse($fh)) {
+  # See the comments for get_userdef_types to why we disable
+  # caching here.
+  while (my %parsed_obj = parse($fh, my $caching = 0)) {
     if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
 
     # function declarations
@@ -338,7 +347,9 @@ sub get_userdef_types {
   open(my $fh, '+<:encoding(UTF-8)', $input_ll)
     or die "Could not open file '$input_ll' $!";
 
-  while (my %parsed_obj = parse($fh)) {
+  # disable caching since userdef_type parsing should'nt
+  # "misinform" future parsing by caching ignorant results.
+  while (my %parsed_obj = parse($fh, my $caching = 0)) {
     if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
 
     # type declarations
