@@ -33,18 +33,17 @@ sub die_version {
 sub die_usage {
   print
   "Usage: prettyll [OPTIONS] <ir>
+
   -demangle       enables the c++ demangler pass
   -gepin          enables the gep inliner pass (experimental!)
   -simgep         enables the gep simplifier pass
   -simvar         enables the variable simplifier pass (on by default)
   -dump-parser    dumps the parser output
   -h, --help      view this help
-  -v, --version   view version\n";
+  -v, --version   view version\n\n";
 
   exit;
 }
-
-if ($#ARGV == -1) { die_usage(); }
 
 GetOptions(
   "demangle" => \our $opt_demangle,
@@ -55,6 +54,8 @@ GetOptions(
   "help" => \&die_usage,
   "version" => \&die_version)
   or die "Error parsing cmdline";
+
+if (scalar @ARGV != 1) { die_usage(); }
 
 my ($input_ll) = $ARGV[0];
 my ($tmp_ll_fh, $tmp_ll) = tempfile("prettyll.XXXX", DIR => "/tmp", UNLINK => 1);
