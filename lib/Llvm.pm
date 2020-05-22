@@ -367,7 +367,13 @@ sub substitute_operands {
 
   foreach my $operand (@instr_operands) {
     if ($$var_hash{$operand}) {
-      $instr =~ s/$operand/$$var_hash{$operand}/g;
+      # the positive lookahead is so that if we want to, say, s/%foo/%bar for
+      # "add i32 %foo, %foo.2"
+      # we don't end up emitting:
+      # "add i32 %bar, %bar.2"
+      # but instead emit:
+      # "add i32 %bar, %foo.2"
+      $instr =~ s/$operand(?=\b)/$$var_hash{$operand}/g;
     }
   }
 
