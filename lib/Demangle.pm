@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2020 Abinav Puthan Purayil
 
+package Demangle;
+
 use strict;
 use warnings;
 
 use lib '.';
 use Llvm;
-
-package Demangle;
 
 sub demangle_if_required {
   my ($line, @symbols) = @_;

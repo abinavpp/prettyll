@@ -3,14 +3,12 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2020 Abinav Puthan Purayil
 
+package Llvm;
+
 use strict;
 use warnings;
 
-use Data::Dumper;
-
 no warnings 'experimental::smartmatch';
-
-package Llvm;
 
 # Regexes for parsing (not used anymore)
 # -------------------

@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2020 Abinav Puthan Purayil
 
+package Utils;
+
 use strict;
 use warnings;
-
-package Utils;
 
 my $pedantic_level = 0;
 

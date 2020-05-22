@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2020 Abinav Puthan Purayil
 
+package Simvar;
+
 use strict;
 use warnings;
 
 use lib '.';
 use Llvm;
 use Utils;
-
-package Simvar;
 
 sub transform {
   if (!$Prettyll::opt_simvar) { return; }

@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2020 Abinav Puthan Purayil
 
+package Gepin;
+
 use strict;
 use warnings;
 
 use lib '.';
 use Llvm;
-
-package Gepin;
 
 sub transform {
   if (!$Prettyll::opt_gepin) { return; }

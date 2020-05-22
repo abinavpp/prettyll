@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: GPL-2.0+
 # Copyright (C) 2020 Abinav Puthan Purayil
 
+package Simgep;
+
 use strict;
 use warnings;
 
 use lib '.';
 use Llvm;
-
-package Simgep;
 
 sub transform {
   if (!$Prettyll::opt_simgep) { return; }
