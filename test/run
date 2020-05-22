@@ -1,0 +1,68 @@
+#! /usr/bin/perl
+
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (C) 2020 Abinav Puthan Purayil
+
+use strict;
+use warnings;
+
+use File::Basename;
+use File::Temp qw/ tempfile tempdir /;
+use Getopt::Long;
+use Term::ANSIColor;
+
+sub print_red {
+  my ($msg) = @_;
+
+  print color('red');
+  print $msg;
+  print color('reset');
+}
+
+my $script_dir = dirname(__FILE__);
+my $output_dir = "output";
+my $prettyll = "../prettyll";
+
+GetOptions(
+  "v" => \my $opt_verbose)
+  or die "Error parsing cmdline";
+
+chdir($script_dir);
+
+my @tests = <*.ll>;
+my $total_re = 0;
+my $total_ve = 0;
+
+foreach my $test (@tests) {
+  open(my $fh, $test);
+  my $line = <$fh>;
+  close($fh);
+
+  my @words = split(/\s+/, $line);
+  splice(@words, 0, 1);
+
+  my ($tmp_fh, $tmp) = tempfile("prettyll-test.XXXX",
+    DIR => "/tmp", UNLINK => 1);
+
+  my $run = "$prettyll " . join(' ', @words) . " " . $test
+    . " > $tmp";
+  if ($opt_verbose) {
+    print "$test: $run\n";
+  }
+  if (system($run) != 0) {
+    print_red "$test: RE\n";
+    $total_re++;
+  }
+
+  $run = "diff $tmp $output_dir/$test";
+  if ($opt_verbose) {
+    print "$test: $run\n";
+  }
+  if (system($run) != 0) {
+    print_red "$test: VE\n";
+    $total_ve++;
+  }
+}
+
+print "\n\nTotal RE(s): $total_re\n";
+print "Total VE(s): $total_ve\n";
