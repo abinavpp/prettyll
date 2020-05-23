@@ -317,9 +317,9 @@ sub get_globals {
   open(my $fh, '+<:encoding(UTF-8)', $input_ll)
     or die "Could not open file '$input_ll' $!";
 
-  # fetch all global declarations
-  # See the comments for get_userdef_types to why we disable
-  # caching here.
+  # fetch all global declarations.
+  # See the comments for get_userdef_types() to see why we disable caching
+  # here.
   while (my %parsed_obj = parse($fh, my $caching = 0)) {
     if ($parsed_obj{type} eq Llvm::parsed_type_eof) { last; }
 
